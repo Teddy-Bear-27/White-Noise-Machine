@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>White / Colored Noise Generator — Canvas UI</title>
+    <style>
+        :root{
+            --bg:#0f1724;--panel:#0b1220;--accent:#6ee7b7;--muted:#94a3b8;--glass:rgba(255,255,255,0.04);
+        }
+        html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#071022 0%, #0b1724 100%);color:#e6eef8}
+        .app{max-width:1100px;margin:28px auto;padding:18px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.7)}
+        header{display:flex;align-items:center;gap:12px}
+        header h1{font-size:20px;margin:0;color:var(--accent)}
+        .layout{display:grid;grid-template-columns:360px 1fr;gap:16px;margin-top:14px}
+        /* when ad present switch to three columns */
+        .layout.with-ad{grid-template-columns:300px 1fr 260px}
+        .panel{background:var(--panel);padding:12px;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+        .controls{display:flex;flex-direction:column;gap:12px}
+        label.small{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+        .row{display:flex;gap:8px;align-items:center}
+        .btn{background:linear-gradient(90deg,var(--accent),#7dd3fc);border:none;padding:8px 12px;border-radius:8px;color:#032;cursor:pointer}
+        .canvas-wrap{display:flex;flex-direction:column;gap:8px}
+        canvas{width:100%;height:320px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);display:block}
+        .eq-canvas{height:160px}
+        .slim{font-size:13px;color:var(--muted)}
+        .eq-presets{display:flex;gap:8px;flex-wrap:wrap}
+        .preset{background:var(--glass);border-radius:8px;padding:6px 8px;font-size:13px;color:var(--muted);cursor:pointer}
+        .footer{margin-top:12px;font-size:12px;color:var(--muted)}
+        .controls .group{background:rgba(255,255,255,0.02);padding:10px;border-radius:8px}
+        input[type=range]{width:100%}
+        .band-label{font-size:11px;color:var(--muted);text-align:center}
+        @media(max-width:900px){.layout{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>Canvas White / Colored Noise Generator</h1>
+            <div style="margin-left:auto" class="slim">Built-in equalizer • spectrum & waveform visualizer • presets</div>
+        </header>
+
+        <div class="layout">
+            <aside class="panel">
+                <div class="controls">
+                    <div class="group">
+                        <label class="small">Noise Type</label>
+                        <div class="row">
+                            <select id="noiseType">
+                                <option value="white">White</option>
+                                <option value="pink">Pink</option>
+                                <option value="brown">Brown (Red)</option>
+                            </select>
+                            <button id="startStop" class="btn">Start</button>
+                        </div>
+                    </div>
+
+                    <div class="group">
+                        <label class="small">Master Volume</label>
+                        <input id="master" type="range" min="0" max="1" step="0.01" value="0.5">
+                    </div>
+
+                    <div class="group">
+                        <label class="small">Equalizer Presets</label>
+                        <div class="eq-presets">
+                            <div class="preset" data-preset="flat">Flat</div>
+                            <div class="preset" data-preset="vocal">Vocal Boost</div>
+                            <div class="preset" data-preset="bass">Bass Boost</div>
+                            <div class="preset" data-preset="soft">Soft</div>
+                        </div>
+                    </div>
+
+                    <div class="group">
+                        <label class="small">EQ Bands (drag on canvas)</label>
+                        <canvas id="eqCanvas" class="eq-canvas"></canvas>
+                        <div class="row slim">
+                            <div style="flex:1">Click & drag band nodes. Double-click node to reset.</div>
+                        </div>
+                    </div>
+
+                    <div class="group">
+                        <label class="small">Preserve State</label>
+                        <div class="row">
+                            <button id="saveState" class="preset">Save</button>
+                            <button id="loadState" class="preset">Load</button>
+                            <button id="resetEQ" class="preset">Reset</button>
+                        </div>
+                    </div>
+
+                </div>
+            </aside>
+
+            <main>
+                <div class="panel canvas-wrap">
+                    <canvas id="visCanvas" width="800" height="320"></canvas>
+                    <canvas id="waveCanvas" width="800" height="120"></canvas>
+                    <div class="footer">Visualizer: Spectrum (top) and Waveform (bottom). Use the EQ to sculpt the noise.</div>
+                </div>
+                    </main>
+                    <!-- Advertisement panel on the right -->
+                    <aside id="adPanel" class="panel" style="display:block;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                            <div style="font-weight:600;color:var(--muted)">Sponsored</div>
+                            <button id="closeAd" title="Close ad" style="background:transparent;border:none;color:var(--muted);cursor:pointer">✕</button>
+                        </div>
+                        <div style="background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:8px;padding:12px;text-align:center;">
+                            <div style="font-size:14px;margin-bottom:10px;color:#dbeafe">Try our premium noise app</div>
+                            <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Longer sessions, advanced EQ, offline support</div>
+                            <button id="adCta" class="btn" style="padding:8px 10px">Learn More</button>
+                        </div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:12px">Ad placeholder — replace with your ad markup.</div>
+                    </aside>
+        </div>
+    </div>
+
+    <script>
+    // --- Quick contract ---
+    // Inputs: user controls (noise type, master volume, EQ gains). Outputs: audio from AudioContext, 2 canvas visualizations.
+    // Error modes: user not interacted => audio context suspended (browsers require gesture). Success: noise plays and visuals update.
+
+    // Requirements checklist (kept visible):
+    // - Single HTML file with canvas-based complex UI (Done)
+    // - Equalizer with draggable bands controlling BiquadFilterNodes (in progress)
+    // - Audio visualizer showing spectrum & waveform (Done)
+
+    // Implementation assumptions: small number of EQ bands (10), using peaking filters; pink/brown noise generated via simple algorithms.
+
+    // --- Audio setup ---
+    let audioCtx = null;
+    let masterGain, analyser, sourceNode;
+    let eqFilters = [];
+    const EQ_FREQS = [32,64,125,250,500,1000,2000,4000,8000,16000];
+
+    // Create / recreate audio graph
+    function initAudio(){
+        if(audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain(); masterGain.gain.value = 0.5;
+        analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048;
+
+        // Build EQ chain
+        eqFilters = EQ_FREQS.map((f,i)=>{
+            const fnode = audioCtx.createBiquadFilter();
+            fnode.type = 'peaking';
+            fnode.frequency.value = f;
+            fnode.Q.value = 1.0 + (i*0.1);
+            fnode.gain.value = 0;
+            return fnode;
+        });
+
+        // connect chain: source -> masterGain -> eqFilters -> analyser -> destination
+        masterGain.connect(eqFilters[0]);
+        for(let i=0;i<eqFilters.length-1;i++) eqFilters[i].connect(eqFilters[i+1]);
+        eqFilters[eqFilters.length-1].connect(analyser);
+        analyser.connect(audioCtx.destination);
+    }
+
+    // Noise generators
+    function makeWhiteBuffer(){
+        const bufferSize = 2 * audioCtx.sampleRate;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for(let i=0;i<bufferSize;i++) data[i] = Math.random()*2 - 1;
+        return buffer;
+    }
+
+    function makePinkBuffer(){
+        // Voss-McCartney algorithm approximate pink noise
+        const bufferSize = 2 * audioCtx.sampleRate;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        const rows = 16;
+        const cols = Math.ceil(bufferSize/rows);
+        const randoms = new Array(rows).fill(0);
+        for(let i=0;i<bufferSize;i++){
+            if(Math.random() < 1/rows){
+                randoms[Math.floor(Math.random()*rows)] = Math.random()*2 -1;
+            }
+            let sum = 0; for(let r=0;r<rows;r++) sum += randoms[r];
+            data[i] = sum / rows;
+        }
+        return buffer;
+    }
+
+    function makeBrownBuffer(){
+        const bufferSize = 2 * audioCtx.sampleRate;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let lastOut = 0.0;
+        for(let i=0;i<bufferSize;i++){
+            const white = Math.random()*2 -1;
+            data[i] = (lastOut + (0.02 * white)) / 1.02;
+            lastOut = data[i];
+            data[i] *= 3.5; // gain
+        }
+        return buffer;
+    }
+
+    function startNoise(type){
+        if(!audioCtx) initAudio();
+        if(sourceNode) stopNoise();
+        // create buffer source
+        const src = audioCtx.createBufferSource();
+        let buffer;
+        if(type==='white') buffer = makeWhiteBuffer();
+        else if(type==='pink') buffer = makePinkBuffer();
+        else buffer = makeBrownBuffer();
+        src.buffer = buffer; src.loop = true;
+        src.connect(masterGain);
+        src.start();
+        sourceNode = src;
+    }
+
+    function stopNoise(){
+        if(sourceNode){
+            try{ sourceNode.stop(); }catch(e){}
+            sourceNode.disconnect();
+            sourceNode = null;
+        }
+    }
+
+    // UI elements
+    const startStop = document.getElementById('startStop');
+    const noiseType = document.getElementById('noiseType');
+    const master = document.getElementById('master');
+    const visCanvas = document.getElementById('visCanvas');
+    const waveCanvas = document.getElementById('waveCanvas');
+    const eqCanvas = document.getElementById('eqCanvas');
+
+    let isPlaying = false;
+
+    startStop.addEventListener('click', ()=>{
+        if(!audioCtx) initAudio();
+        if(!isPlaying){
+            // resume audio context on user gesture
+            audioCtx.resume().then(()=>{
+                startNoise(noiseType.value);
+                isPlaying = true; startStop.textContent = 'Stop';
+            });
+        } else {
+            stopNoise(); isPlaying=false; startStop.textContent='Start';
+        }
+    });
+
+    noiseType.addEventListener('change', ()=>{
+        if(isPlaying){ startNoise(noiseType.value); }
+    });
+
+    master.addEventListener('input', ()=>{
+        if(masterGain) masterGain.gain.value = parseFloat(master.value);
+    });
+
+    // analyser draw
+    const visCtx = visCanvas.getContext('2d');
+    const waveCtx = waveCanvas.getContext('2d');
+
+    function drawVisualizer(){
+        requestAnimationFrame(drawVisualizer);
+        if(!analyser){ // clear canvases
+            visCtx.clearRect(0,0,visCanvas.width,visCanvas.height);
+            waveCtx.clearRect(0,0,waveCanvas.width,waveCanvas.height);
+            return;
+        }
+        const width = visCanvas.width = visCanvas.clientWidth * devicePixelRatio;
+        const height = visCanvas.height = visCanvas.clientHeight * devicePixelRatio;
+        const waveW = waveCanvas.width = waveCanvas.clientWidth * devicePixelRatio;
+        const waveH = waveCanvas.height = waveCanvas.clientHeight * devicePixelRatio;
+
+        const freqData = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(freqData);
+
+        // Draw spectrum (log-scaled bars)
+        visCtx.clearRect(0,0,width,height);
+        const barCount = 128;
+        const binSize = Math.floor(freqData.length / barCount);
+        const maxH = height - 20*devicePixelRatio;
+        for(let i=0;i<barCount;i++){
+            let sum=0; for(let j=0;j<binSize;j++) sum += freqData[i*binSize + j] || 0;
+            const v = sum / binSize / 255;
+            const x = i*(width/barCount);
+            const h = v * maxH;
+            const grad = visCtx.createLinearGradient(x,0,x+h,0);
+            grad.addColorStop(0,'#7dd3fc'); grad.addColorStop(1,'#6ee7b7');
+            visCtx.fillStyle = grad;
+            visCtx.fillRect(x + 2*devicePixelRatio, height - h, (width/barCount)-4*devicePixelRatio, h);
+        }
+
+        // Waveform
+        const waveData = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(waveData);
+        waveCtx.clearRect(0,0,waveW,waveH);
+        waveCtx.lineWidth = 2*devicePixelRatio; waveCtx.strokeStyle = '#a7f3d0';
+        waveCtx.beginPath();
+        const slice = waveW / waveData.length;
+        for(let i=0;i<waveData.length;i++){
+            const v = (waveData[i] / 128.0) - 1.0;
+            const y = (waveH/2) + v * (waveH/2) * 0.9;
+            if(i===0) waveCtx.moveTo(i*slice, y); else waveCtx.lineTo(i*slice,y);
+        }
+        waveCtx.stroke();
+    }
+    drawVisualizer();
+
+    // --- EQ canvas and interaction ---
+    const eqCtx = eqCanvas.getContext('2d');
+    let bands = EQ_FREQS.map((f,i)=>({
+        freq:f, gain:0, x:0, y:0, q: eqFilters[i]? eqFilters[i].Q.value : 1
+    }));
+
+    function resizeEQ(){
+        eqCanvas.width = eqCanvas.clientWidth * devicePixelRatio;
+        eqCanvas.height = eqCanvas.clientHeight * devicePixelRatio;
+        // position bands
+        for(let i=0;i<bands.length;i++){
+            const nx = Math.log10(bands[i].freq) - Math.log10(EQ_FREQS[0]);
+            const span = Math.log10(EQ_FREQS[bands.length-1]) - Math.log10(EQ_FREQS[0]);
+            const px = nx / span;
+            bands[i].x = px * eqCanvas.width;
+            bands[i].y = eqCanvas.height/2 - bands[i].gain/20 * (eqCanvas.height*0.4);
+        }
+    }
+
+    function drawEQ(){
+        eqCtx.clearRect(0,0,eqCanvas.width,eqCanvas.height);
+        // grid
+        eqCtx.strokeStyle = 'rgba(255,255,255,0.03)'; eqCtx.lineWidth = 1;
+        eqCtx.beginPath();
+        for(let i=0;i<5;i++){
+            const y = i*(eqCanvas.height/4);
+            eqCtx.moveTo(0,y); eqCtx.lineTo(eqCanvas.width,y);
+        }
+        eqCtx.stroke();
+
+        // draw curve (simple interpolation)
+        eqCtx.beginPath();
+        eqCtx.lineWidth = 2*devicePixelRatio;
+        eqCtx.strokeStyle = '#60a5fa';
+        for(let i=0;i<bands.length;i++){
+            const p = bands[i];
+            if(i===0) eqCtx.moveTo(p.x,p.y); else eqCtx.lineTo(p.x,p.y);
+        }
+        eqCtx.stroke();
+
+        // draw nodes
+        for(const b of bands){
+            eqCtx.beginPath();
+            eqCtx.fillStyle = '#7dd3fc';
+            eqCtx.strokeStyle = '#022';
+            eqCtx.lineWidth = 1*devicePixelRatio;
+            eqCtx.arc(b.x,b.y,8*devicePixelRatio,0,Math.PI*2);
+            eqCtx.fill(); eqCtx.stroke();
+            // label
+            eqCtx.fillStyle = 'rgba(255,255,255,0.7)';
+            eqCtx.font = `${10*devicePixelRatio}px sans-serif`;
+            eqCtx.textAlign = 'center';
+            eqCtx.fillText(b.freq + 'Hz', b.x, eqCanvas.height - 6*devicePixelRatio);
+        }
+    }
+
+    function syncFilters(){
+        if(!audioCtx || !eqFilters.length) return;
+        for(let i=0;i<bands.length;i++){
+            const gain = bands[i].gain;
+            eqFilters[i].gain.setTargetAtTime(gain, audioCtx.currentTime, 0.01);
+        }
+    }
+
+    // interaction
+    let drag = null;
+    function eqPointerDown(e){
+        const rect = eqCanvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * devicePixelRatio;
+        const y = (e.clientY - rect.top) * devicePixelRatio;
+        for(let i=0;i<bands.length;i++){
+            const b = bands[i];
+            const dx = x - b.x, dy = y - b.y;
+            if(Math.hypot(dx,dy) < 14*devicePixelRatio){ drag = {i,ox:dx,oy:dy}; return; }
+        }
+    }
+
+    function eqPointerMove(e){
+        if(!drag) return;
+        const rect = eqCanvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * devicePixelRatio;
+        const y = (e.clientY - rect.top) * devicePixelRatio;
+        const b = bands[drag.i];
+        b.x = Math.max(0, Math.min(eqCanvas.width, x - drag.ox));
+        // map y back to gain (-20..20)
+        const gain = ((eqCanvas.height/2 - b.y) / (eqCanvas.height*0.4)) * 20;
+        b.y = Math.max(8, Math.min(eqCanvas.height-8, y));
+        const newGain = ((eqCanvas.height/2 - b.y) / (eqCanvas.height*0.4)) * 20;
+        b.gain = Math.max(-20, Math.min(20, newGain));
+        syncFilters(); drawEQ();
+    }
+
+    function eqPointerUp(e){ drag = null; }
+
+    eqCanvas.addEventListener('pointerdown', eqPointerDown);
+    window.addEventListener('pointermove', e=>{ if(drag) {
+        const rect = eqCanvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * devicePixelRatio;
+        const y = (e.clientY - rect.top) * devicePixelRatio;
+        const b = bands[drag.i];
+        // clamp
+        b.x = Math.max(0, Math.min(eqCanvas.width, x - drag.ox));
+        b.y = Math.max(8, Math.min(eqCanvas.height-8, y));
+        b.gain = ((eqCanvas.height/2 - b.y) / (eqCanvas.height*0.4)) * 20;
+        syncFilters(); drawEQ();
+    }});
+    window.addEventListener('pointerup', eqPointerUp);
+
+    eqCanvas.addEventListener('dblclick', (e)=>{
+        const rect = eqCanvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * devicePixelRatio;
+        let nearest = 0; let best = Infinity;
+        for(let i=0;i<bands.length;i++){ const d = Math.abs(bands[i].x - x); if(d<best){best=d;nearest=i;} }
+        bands[nearest].gain = 0; resizeEQ(); drawEQ(); syncFilters();
+    });
+
+    // presets & state
+    document.querySelectorAll('.preset').forEach(el=>el.addEventListener('click', ()=>{
+        const p = el.getAttribute('data-preset');
+        if(!p) return;
+        if(p==='flat') bands.forEach(b=>b.gain=0);
+        if(p==='vocal') bands.forEach((b,i)=> b.gain = (i>=3 && i<=6)? 4 : -2);
+        if(p==='bass') bands.forEach((b,i)=> b.gain = (i<=2)? 6 : 0);
+        if(p==='soft') bands.forEach((b,i)=> b.gain = (i<=3)? -4 : (i>=7?2:0));
+        resizeEQ(); drawEQ(); syncFilters();
+    }));
+
+    document.getElementById('resetEQ').addEventListener('click', ()=>{ bands.forEach(b=>b.gain=0); resizeEQ(); drawEQ(); syncFilters(); });
+
+    document.getElementById('saveState').addEventListener('click', ()=>{
+        const state = {noise: noiseType.value, master: master.value, bands: bands.map(b=>b.gain)};
+        localStorage.setItem('wn_state', JSON.stringify(state));
+        alert('State saved');
+    });
+    document.getElementById('loadState').addEventListener('click', ()=>{
+        const raw = localStorage.getItem('wn_state'); if(!raw) return alert('No saved state');
+        try{ const s = JSON.parse(raw); noiseType.value = s.noise; master.value = s.master; bands.forEach((b,i)=>b.gain = s.bands[i]||0); master.dispatchEvent(new Event('input')); resizeEQ(); drawEQ(); syncFilters(); }catch(e){alert('Invalid state');}
+    });
+
+    // initial layout
+    function layoutInit(){
+        devicePixelRatio = window.devicePixelRatio || 1;
+        resizeEQ(); drawEQ();
+    }
+    let devicePixelRatio = window.devicePixelRatio || 1;
+    window.addEventListener('resize', ()=>{ devicePixelRatio = window.devicePixelRatio || 1; resizeEQ(); drawEQ(); });
+    layoutInit();
+
+    // wire EQ filter references (after audio init)
+    const eqSetupObserver = new MutationObserver(()=>{
+        if(audioCtx && eqFilters.length){
+            // ensure band gains are applied
+            bands.forEach((b,i)=>{ if(eqFilters[i]) eqFilters[i].gain.value = b.gain; });
+        }
+    });
+    eqSetupObserver.observe(document.body, {childList:true, subtree:true});
+
+    // small loop to apply gains once the audio is created
+    setInterval(()=>{ if(audioCtx && eqFilters.length){ bands.forEach((b,i)=>{ try{ eqFilters[i].gain.value = b.gain; }catch(e){} }); } }, 200);
+
+    // Ensure canvases get proper pixel sizing initially
+    requestAnimationFrame(()=>{ resizeEQ(); drawEQ(); });
+
+    </script>
+        <script>
+        // Ad panel behavior: persist closed state
+        (function(){
+            const adPanel = document.getElementById('adPanel');
+            const closeAd = document.getElementById('closeAd');
+            const layout = document.querySelector('.layout');
+            function updateLayout(){
+                if(adPanel && adPanel.style.display !== 'none') layout.classList.add('with-ad'); else layout.classList.remove('with-ad');
+            }
+            // initialize from storage
+            const hidden = localStorage.getItem('wn_ad_hidden');
+            if(hidden === '1'){ if(adPanel) adPanel.style.display = 'none'; }
+            updateLayout();
+            if(closeAd){ closeAd.addEventListener('click', ()=>{
+                if(adPanel) adPanel.style.display = 'none';
+                localStorage.setItem('wn_ad_hidden','1');
+                updateLayout();
+            }); }
+            // optional CTA handler
+            const adCta = document.getElementById('adCta'); if(adCta) adCta.addEventListener('click', ()=>{ window.open('https://example.com','_blank'); });
+        })();
+        </script>
+</body>
+</html>
